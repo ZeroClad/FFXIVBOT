@@ -1,8 +1,14 @@
 # FFXIVBOT Docker
 
-[![Build Status](https://img.shields.io/docker/cloud/build/bluefissure/ffxivbot.svg)](https://cloud.docker.com/repository/docker/bluefissure/ffxivbot) [![Downloads](https://img.shields.io/docker/pulls/bluefissure/ffxivbot.svg)](https://cloud.docker.com/repository/docker/bluefissure/ffxivbot)
+[![Build Status](https://img.shields.io/docker/cloud/build/bluefissure/ffxivbot.svg)](https://cloud.docker.com/repository/docker/bluefissure/ffxivbot) [![Downloads](https://img.shields.io/docker/pulls/bluefissure/ffxivbot.svg)](https://cloud.docker.com/repository/docker/bluefissure/ffxivbot)  [![Size](https://img.shields.io/microbadger/image-size/bluefissure/ffxivbot.svg)](https://cloud.docker.com/repository/docker/bluefissure/ffxivbot)
 
 [![CodeFactor](https://www.codefactor.io/repository/github/bluefissure/ffxivbot/badge/master)](https://www.codefactor.io/repository/github/bluefissure/ffxivbot/overview/master) [![license](https://img.shields.io/badge/license-GPL-blue.svg)](https://github.com/Bluefissure/FFXIVBOT/blob/master/LICENSE)
+
+
+
+***改镜像由Linux内核构建，无法在Windows服务器上运行，只能在Windows物理机中构建***
+
+
 
 ## 安装Docker
 
@@ -26,8 +32,6 @@ sudo chmod +x /usr/local/bin/docker-compose
 docker-compose --version
 ```
 
-[Configure site](https://xn--v9x.net/tata)
-
 ### Windows
 
 #### docker-ce
@@ -40,7 +44,7 @@ https://docs.docker.com/compose/install/
 
 ## 下载Compose配置并启动
 
-[Demo site](https://xn--v9x.net/quest)
+***Linux***
 
 ```bash
 wget https://raw.githubusercontent.com/Bluefissure/FFXIVBOT/docker/release/docker-compose.yml
@@ -90,7 +94,7 @@ nohup python /FFXIVBOT/utils/crawl_wb.py >> /var/log/weibo_cron.log &
 ***Windows***
 
 ```powershell
-抱歉我没找到Windows上面的定时服务（跑
+python /FFXIVBOT/utils/crawl_wb.py 
 ```
 
 通过以下代码创建超级管理员：
@@ -100,6 +104,18 @@ python manage.py createsuperuser
 ```
 
 之后Ctrl+D退出docker，并通过IP:8000端口访问即可
+
+### 启动RBQ
+
+来到`/FFXIVBOT/ffixvbot`目录，运行：
+
+```bash
+nohup python /FFXIVBOT/ffixvbot/pika_rabbit.py 2>/dev/null &
+```
+
+如果要多个RBQ消费者，多运行几次上面的代码即可。
+
+<del>这一步我还没测试，但是可以和巨硬学习把用户当作测试部门。</del>
 
 ### 数据库同步
 
