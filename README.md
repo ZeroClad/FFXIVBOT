@@ -6,7 +6,7 @@
 
 
 
-***改镜像由Linux内核构建，无法在Windows服务器上运行，只能在Windows物理机中构建***
+***该镜像由Linux内核构建，无法在Windows服务器上运行，只能在Windows物理机中构建***
 
 
 
