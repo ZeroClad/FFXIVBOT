@@ -107,10 +107,10 @@ python manage.py createsuperuser
 
 ### 启动RBQ
 
-来到`/FFXIVBOT/ffixvbot`目录，运行：
+来到`/FFXIVBOT/ffxivbot`目录，运行：
 
 ```bash
-nohup python /FFXIVBOT/ffixvbot/pika_rabbit.py 2>/dev/null &
+nohup python /FFXIVBOT/ffxivbot/pika_rabbit.py 2>/dev/null &
 ```
 
 如果要多个RBQ消费者，多运行几次上面的代码即可。
