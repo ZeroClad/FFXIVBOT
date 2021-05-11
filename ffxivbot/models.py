@@ -1,7 +1,10 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils.html import mark_safe
 from datetime import datetime
 from pytz import timezone
+from urllib.parse import urlparse
+import hashlib
 import requests
 import os
 import json
@@ -104,6 +107,7 @@ class QQGroup(models.Model):
     )
     commands = models.TextField(default="{}")
     api = models.BooleanField(default=False)
+    wordcloud = models.BooleanField(default=False)
     server = models.ForeignKey(
         Server, on_delete=models.DO_NOTHING, blank=True, null=True
     )
@@ -237,6 +241,7 @@ class QQBot(models.Model):
     friend_list = models.TextField(default="{}")
     public = models.BooleanField(default=True)
     r18 = models.BooleanField(default=False)
+    api = models.BooleanField(default=True)
     disconnections = models.TextField(default="[]")
     disconnect_time = models.BigIntegerField(default=0)
     command_stat = models.TextField(default="{}")
@@ -362,11 +367,36 @@ class Image(models.Model):
     img_hash = models.CharField(max_length=32, default="")
     timestamp = models.IntegerField(default=0)
     add_by = models.ForeignKey(
-        QQUser, on_delete=models.CASCADE, related_name="upload_images"
+        QQUser, on_delete=models.DO_NOTHING, related_name="upload_images"
+    )
+    add_by_bot = models.ForeignKey(
+        QQBot,
+        on_delete=models.DO_NOTHING,
+        related_name="upload_images",
+        blank=True,
+        null=True,
     )
 
     def __str__(self):
         return self.name
+
+    def get_url(self):
+        if self.path.startswith("http"):
+            url = self.path
+            o = urlparse(url)
+            self.domain = "{}://{}".format(o.scheme, o.netloc)
+            self.path = o.path
+            self.url = url
+            self.save(update_fields=["domain", "path", "url"])
+        return self.url if self.url else (self.domain + self.path)
+
+    def image_tag(self):
+        return mark_safe(
+            '<img src="%s" style="max-width: 300px; max-height: 150px; resize: both;overflow: scroll;"/>'
+            % (self.get_url())
+        )
+
+    image_tag.short_description = "Image"
 
 
 class Lottery(models.Model):
@@ -600,8 +630,11 @@ class TomonBot(models.Model):
     token = models.CharField(max_length=256, blank=True)
     last_heartbeat = models.BigIntegerField(default=0)
     heartbeat_interval = models.BigIntegerField(default=0)
+    bot = models.BooleanField(default=False)
 
     def auth(self, api_base="https://beta.tomon.co/api/v1"):
+        if self.bot:
+            return
         auth_url = os.path.join(api_base, "auth/login")
         payload = {"full_name": self.username, "password": self.password}
         r = requests.post(auth_url, data=payload)
@@ -611,4 +644,13 @@ class TomonBot(models.Model):
             self.save()
         else:
             print("Error Response: {}\n{}".format(r.status_code, r.json()))
-        return r
+
+
+class HousingPreset(models.Model):
+    items_hash = models.CharField(primary_key=True, max_length=32)
+    location_id = models.IntegerField(default=0)
+    name = models.CharField(max_length=256)
+    items = models.TextField(blank=True)
+    tags = models.TextField(blank=True)
+    uploader = models.CharField(max_length=256)
+    user_id = models.CharField(max_length=32)

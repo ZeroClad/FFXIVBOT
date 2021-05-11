@@ -101,12 +101,16 @@ class WSConsumer(AsyncWebsocketConsumer):
                 .strip()
             )
             client_role = headers["x-client-role"]
-            user_agent = headers["user-agent"]
+            user_agent = headers.get("user-agent", "Unknown")
             if client_role != "Universal":
                 LOGGER.error("Unkown client_role: {}".format(client_role))
                 # await self.close()
                 return
-            if "CQHttp" not in user_agent and "MiraiHttp" not in user_agent:
+            if (
+                "CQHttp" not in user_agent
+                and "MiraiHttp" not in user_agent
+                and "OneBot" not in user_agent
+            ):
                 LOGGER.error(
                     "Unknown user_agent: {} for {}".format(user_agent, ws_self_id)
                 )
@@ -118,6 +122,9 @@ class WSConsumer(AsyncWebsocketConsumer):
                         "Unsupport user_agent: {} for {}".format(user_agent, ws_self_id)
                     )
                     return
+            elif "OneBot" in user_agent and "Bearer" in ws_access_token:
+                # onebot基于rfc6750往token加入了Bearer
+                ws_access_token = ws_access_token.replace("Bearer", "").strip()
 
             bot = None
             # with transaction.atomic():
@@ -200,14 +207,22 @@ class WSConsumer(AsyncWebsocketConsumer):
                     receive["post_type"] == "meta_event"
                     and receive["meta_event_type"] == "heartbeat"
                 ):
-                    LOGGER.info(
-                        "bot:{} Event heartbeat at time:{}".format(
-                            self.bot.user_id, int(time.time())
-                        )
-                    )
+                    # LOGGER.info(
+                    #     "bot:{} Event heartbeat at time:{}".format(
+                    #         self.bot.user_id, int(time.time())
+                    #     )
+                    # )
                     self.pub.ping()
                     # await self.call_api("get_status",{},"get_status:{}".format(self.bot_user_id))
                 self_id = receive["self_id"]
+
+                # if (
+                #     receive["post_type"] == "request"
+                #     or receive["post_type"] == "notice"
+                # ):
+                #     LOGGER.info("Dev Debugging........")
+                #     LOGGER.info(json.dumps(receive))
+
                 if "message" in receive.keys():
                     # if int(self_id)==3299510002:
                     #     LOGGER.info("receving prototype message:{}".format(receive["message"]))
@@ -221,10 +236,11 @@ class WSConsumer(AsyncWebsocketConsumer):
                     #         priority += 1
                     # except BaseException:
                     #     traceback.print_exc()
-                    match_prefix = ["/", "\\", "[CQ:at,qq={}]".format(self_id)]
-                    push_to_mq = any(
-                        [receive["message"].startswith(x) for x in match_prefix]
-                    )
+                    # match_prefix = ["/", "\\", "[CQ:at,qq={}]".format(self_id)]
+                    # push_to_mq = any(
+                    #     [receive["message"].startswith(x) for x in match_prefix]
+                    # )
+                    push_to_mq = True
                     if "group_id" in receive:
                         priority += 1
                         group_id = receive["group_id"]
@@ -249,7 +265,10 @@ class WSConsumer(AsyncWebsocketConsumer):
                         self.pub.send(text_data, priority)
                     return
 
-                if receive["post_type"] == "request" or receive["post_type"] == "event":
+                if (
+                    receive["post_type"] == "request"
+                    or receive["post_type"] == "notice"
+                ):
                     priority = 3
                     self.pub.send(text_data, priority)
             except Exception as e:
@@ -269,7 +288,7 @@ class WSConsumer(AsyncWebsocketConsumer):
             if "echo" in receive.keys() and receive["echo"] is not None:
                 echo = receive["echo"]
                 LOGGER.debug("echo:{} received".format(receive["echo"]))
-                if echo.find("get_group_member_list") == 0:
+                if "get_group_member_list" in echo:
                     group_id = echo.replace("get_group_member_list:", "").strip()
                     try:
                         # group = QQGroup.objects.select_for_update().get(group_id=group_id)
@@ -284,16 +303,16 @@ class WSConsumer(AsyncWebsocketConsumer):
                         LOGGER.error("QQGroup.DoesNotExist:{}".format(group_id))
                         return
                     LOGGER.debug("group %s member updated" % (group.group_id))
-                if echo.find("get_group_list") == 0:
+                if "get_group_list" in echo:
                     self.bot.group_list = json.dumps(receive["data"])
                     self.bot.save(update_fields=["group_list"])
-                if echo.find("_get_friend_list") == 0:
+                if "get_friend_list" in echo:
                     self.bot.friend_list = json.dumps(receive["data"])
                     self.bot.save(update_fields=["friend_list"])
-                if echo.find("get_version_info") == 0:
+                if "get_version_info" in echo:
                     self.bot.version_info = json.dumps(receive["data"])
                     self.bot.save(update_fields=["version_info"])
-                if echo.find("get_status") == 0:
+                if "get_status" in echo:
                     user_id = echo.split(":")[1]
                     if not receive["data"] or not receive["data"]["good"]:
                         LOGGER.error(

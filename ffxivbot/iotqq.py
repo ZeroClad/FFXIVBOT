@@ -17,8 +17,6 @@ import argparse
 import asyncio
 import socketio
 import traceback
-import socketio
-import argparse
 
 try:
     import thread
@@ -30,7 +28,7 @@ os.environ["DJANGO_SETTINGS_MODULE"] = "FFXIV.settings"
 from FFXIV import settings
 
 django.setup()
-from ffxivbot.models import *
+from ffxivbot.models import QQGroup, QQBot
 from consumers import PikaPublisher
 
 
@@ -50,25 +48,27 @@ def OnGroupMsgs(msg):
             msg["Content"] = json.loads(msg["Content"])
         except json.decoder.JSONDecodeError:
             pass
-        # print(json.dumps(msg, indent=4, sort_keys=True))
+        print(json.dumps(msg, indent=4, sort_keys=True))
         raw_msg = (
             msg["Content"]
             if isinstance(msg["Content"], str)
             else msg["Content"].get("Content", "")
         )
+        raw_msg = raw_msg.strip()
         if "GroupPic" in msg["Content"]:
-            raw_msg += "[CQ:image,file={}]".format(msg["Content"]["GroupPic"][0]["Url"])
+            raw_msg += " [CQ:image,url={}]".format(msg["Content"]["GroupPic"][0]["Url"])
+        print(raw_msg)
         if not raw_msg.startswith("/"):
             return
         member_role = "member"
         try:
-            group = Group.objects.get(group_id=msg["FromGroupId"])
+            group = QQGroup.objects.get(group_id=msg["FromGroupId"])
             member_list = json.loads(group.member_list)
             for member in member_list:
                 if member["user_id"] == msg["FromUserId"]:
                     member_role = member["role"]
                     break
-        except:
+        except QQGroup.DoesNotExist:
             pass
         data = {
             "self_id": bot.user_id,

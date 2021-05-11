@@ -124,8 +124,9 @@ class TerritoryAdmin(admin.ModelAdmin):
 
 
 class ImageAdmin(admin.ModelAdmin):
-    list_display = ["name", "key"]
-    search_fields = ["name", "key"]
+    list_display = ["name", "key", "add_by", "image_tag"]
+    search_fields = ["name", "key", "add_by__user_id"]
+    readonly_fields = ["image_tag"]
     raw_id_fields = ["add_by"]
 
 
@@ -178,7 +179,7 @@ class TreasureMapAdmin(admin.ModelAdmin):
 
 
 class ScreenAdmin(admin.ModelAdmin):
-    list_display = ("name", "nickname", "classname")
+    list_display = ("name", "id", "nickname", "classname")
     search_fields = ["name", "name"]
 
 
@@ -188,6 +189,16 @@ class LuckDataAdmin(admin.ModelAdmin):
 
 class TomonBotAdmin(admin.ModelAdmin):
     list_display = ["username", "qqbot"]
+
+
+class CommandLogAdmin(admin.ModelAdmin):
+    list_display = ["time", "command", "user_id", "bot_id", "group_id"]
+    search_fields = ["command", "user_id", "bot_id", "group_id"]
+    list_filter = ["command"]
+
+class HousingPresetAdmin(admin.ModelAdmin):
+    list_display = ["items_hash", "name", "tags",  "uploader"]
+    search_fields = ["items_hash", "name", "tags", "uploader"]
 
 
 admin.site.register(QQGroup, QQGroupAdmin)
@@ -222,3 +233,5 @@ admin.site.register(TreasureMap, TreasureMapAdmin)
 admin.site.register(Screen, ScreenAdmin)
 admin.site.register(LuckData, LuckDataAdmin)
 admin.site.register(TomonBot, TomonBotAdmin)
+admin.site.register(CommandLog, CommandLogAdmin)
+admin.site.register(HousingPreset, HousingPresetAdmin)

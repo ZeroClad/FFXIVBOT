@@ -1,6 +1,7 @@
 from .QQEventHandler import QQEventHandler
 from .QQUtils import *
 from ffxivbot.models import *
+from django.db.models import Q
 import logging
 import json
 import random
@@ -8,17 +9,8 @@ import requests
 import traceback
 import time
 import copy
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
-
-
-def get_image_from_CQ(CQ_text):
-    if "url=" in CQ_text:
-        tmp = CQ_text
-        tmp = tmp[tmp.find("url=") : -1]
-        tmp = tmp.replace("url=", "")
-        img_url = tmp.replace("]", "")
-        return img_url
-    return None
 
 
 def upload_image(img_url, token=""):
@@ -50,10 +42,12 @@ def QQCommand_image(*args, **kwargs):
         QQ_BASE_URL = global_config["QQ_BASE_URL"]
         SMMS_TOKEN = global_config.get("SMMS_TOKEN", "")
         receive = kwargs["receive"]
+        bot = kwargs["bot"]
 
         receive_msg = receive["message"].replace("/image", "", 1).strip()
         msg_list = receive_msg.split(" ")
         second_command = msg_list[0]
+        image_already_exist = False
         if second_command == "" or second_command == "help":
             msg = " 禁止上传R18/NSFW图片：\n/image upload $category $image : 给类别$category上传图片\n/image $category : 随机返回一张$category的图片\n/image del $name : 删除名为$name的图片\n查看图库：https://xn--v9x.net/image/\nPowered by https://sm.ms"
         elif second_command == "upload":
@@ -66,11 +60,13 @@ def QQCommand_image(*args, **kwargs):
                 if not qquser.able_to_upload_image:
                     msg = "[CQ:at,qq={}] 您由于触犯规则无权上传图片".format(receive["user_id"])
                 else:
-                    category = msg_list[1].strip()
+                    category = msg_list[1].strip().strip("$")
                     CQ_text = msg_list[2].strip()
-                    img_url = get_image_from_CQ(CQ_text)
+                    img_url = get_CQ_image(CQ_text)
                     if not img_url:
                         msg = "未发现图片信息"
+                    elif not category:
+                        msg = "请选择上传图片类别"
                     else:
                         img_info = upload_image(img_url, SMMS_TOKEN)
                         if not img_info["success"]:
@@ -84,18 +80,15 @@ def QQCommand_image(*args, **kwargs):
                                     "Image upload repeated limit, this image exists at: ",
                                     "",
                                 )
-                                path = url.replace("https://i.loli.net", "")
-                                path = path.replace("https://vip1.loli.net", "")
-                                domain = (
-                                    "https://vip1.loli.net"
-                                    if "https://vip1.loli.net" in url
-                                    else "https://i.loli.net"
-                                )
+                                o = urlparse(url)
+                                path = o.path
+                                domain = "{}://{}".format(o.scheme, o.netloc)
                                 name = copy.deepcopy(path)
                                 while "/" in name:
                                     name = name[name.find("/") + 1 :]
                                 try:
-                                    img = Image.objects.get(path=path)
+                                    img = Image.objects.get(domain=domain, path=path)
+                                    image_already_exist = True
                                     msg = '图片"{}"已存在于类别"{}"之中，无法重复上传'.format(
                                         img.name, img.key
                                     )
@@ -107,18 +100,19 @@ def QQCommand_image(*args, **kwargs):
                                         path=path,
                                         img_hash="null",
                                         timestamp=int(time.time()),
+                                        url=url,
                                         add_by=qquser,
+                                        add_by_bot=bot,
                                     )
                                 img.save()
-                                msg = '图片"{}"上传至类别"{}"成功'.format(img.name, img.key)
+                                if not image_already_exist:
+                                    msg = '图片"{}"上传至类别"{}"成功'.format(img.name, img.key)
                         else:
                             img_info = img_info["data"]
                             url = img_info.get("url", "")
-                            domain = (
-                                "https://vip1.loli.net"
-                                if "https://vip1.loli.net" in url
-                                else "https://i.loli.net"
-                            )
+                            o = urlparse(url)
+                            path = o.path
+                            domain = "{}://{}".format(o.scheme, o.netloc)
                             img = Image(
                                 domain=domain,
                                 key=category,
@@ -128,6 +122,7 @@ def QQCommand_image(*args, **kwargs):
                                 timestamp=img_info.get("timestamp", 0),
                                 url=url,
                                 add_by=qquser,
+                                add_by_bot=bot,
                             )
                             img.save()
                             msg = '图片"{}"上传至类别"{}"成功'.format(img.name, img.key)
@@ -139,7 +134,10 @@ def QQCommand_image(*args, **kwargs):
                 (qquser, created) = QQUser.objects.get_or_create(
                     user_id=receive["user_id"]
                 )
-                imgs = Image.objects.filter(name=name, add_by=qquser)
+                imgs = Image.objects.filter(
+                    Q(name=name),
+                    Q(add_by=qquser) | Q(add_by_bot__owner_id=qquser.user_id),
+                )
                 if not imgs.exists():
                     msg = '未找到名为"{}"的图片或您无权删除这张图片'.format(name)
                 else:
@@ -148,6 +146,8 @@ def QQCommand_image(*args, **kwargs):
                     msg = '图片"{}"删除完毕'.format(name)
         else:
             category = msg_list[0].strip()
+            if category.startswith("$"):
+                category = category[1:]
             get_info = "info" in category
             category = category.replace("info", "", 1)
             found = False
@@ -160,11 +160,12 @@ def QQCommand_image(*args, **kwargs):
                     found = True
                 else:
                     img = random.sample(list(imgs), 1)[0]
-                    img_url = img.domain + img.path
+                    img_url = img.get_url()
                     r = requests.head(img_url, timeout=3)
                     if r.status_code == 404:
                         img.delete()
                         print("deleting {}".format(img))
+                        msg = "本次请求的图片被图床删掉了 = =\n再试一次吧~~"
                     else:
                         found = True
                         msg = "[CQ:image,cache=0,file={}]\n".format(img_url)
